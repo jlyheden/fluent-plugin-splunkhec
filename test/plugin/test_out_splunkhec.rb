@@ -186,4 +186,26 @@ class SplunkHECOutputTest < Test::Unit::TestCase
     assert_requested(splunk_request)
   end
 
+  def test_should_use_dynamic_index
+    splunk_request = stub_request(:post, SPLUNK_URL).with(body: hash_including({'index' => 'prefix_fluentd_mypod'}))
+
+    cfg = CONFIG + %[
+      dynamic_index true
+      dynamic_index_pattern prefix_${source}_${record['kubernetes']['pod_name']}
+    ]
+
+    d = create_driver_splunkhec(cfg)
+    d.run do
+      d.emit(
+        {
+          'message' => 'data',
+          'kubernetes' => {
+            'pod_name' => 'mypod'
+          }
+        }
+      )
+    end
+    assert_requested(splunk_request)
+  end
+
 end

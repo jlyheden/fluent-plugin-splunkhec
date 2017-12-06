@@ -21,6 +21,10 @@ module Fluent
     config_param :usejson,             :bool,   :default => true
     config_param :send_batched_events, :bool,   :default => false
 
+    # Dynamic index
+    config_param :dynamic_index,         :bool,   :default => false
+    config_param :dynamic_index_pattern, :string, :default => nil
+
     # This method is called before starting.
     # Here we construct the Splunk HEC URL to POST data to
     # If the configuration is invalid, raise Fluent::ConfigError.
@@ -72,14 +76,24 @@ module Fluent
 
         sourcetype = @sourcetype == 'tag' ? tag : @sourcetype
 
+        if @dynamic_index
+          parts = []
+          # dangerous as you can execute code basically from this parameter
+          splunk_index = eval('"' + @dynamic_index_pattern.gsub(/\$/, "#") + '"')
+        else
+          splunk_index = @index
+        end
+
+        log.debug "splunk index: #{splunk_index}"
+
         # Build body for the POST request
         if !@usejson
           event = record["time"]+ " " + record["message"].to_json.gsub(/^"|"$/,"")
-          body << '{"time":"'+ DateTime.parse(record["time"]).strftime("%Q") +'", "event":"' + event + '", "sourcetype" :"' + sourcetype + '", "source" :"' + @source + '", "index" :"' + @index + '", "host" : "' + @event_host + '"}'
+          body << '{"time":"'+ DateTime.parse(record["time"]).strftime("%Q") +'", "event":"' + event + '", "sourcetype" :"' + sourcetype + '", "source" :"' + @source + '", "index" :"' + splunk_index + '", "host" : "' + @event_host + '"}'
         elsif @send_event_as_json
-          body << '{"time" :' + time.to_s + ', "event" :' + event + ', "sourcetype" :"' + sourcetype + '", "source" :"' + @source + '", "index" :"' + @index + '", "host" : "' + @event_host + '"}'
+          body << '{"time" :' + time.to_s + ', "event" :' + event + ', "sourcetype" :"' + sourcetype + '", "source" :"' + @source + '", "index" :"' + splunk_index + '", "host" : "' + @event_host + '"}'
         else
-          body << '{"time" :' + time.to_s + ', "event" :"' + event + '", "sourcetype" :"' + sourcetype + '", "source" :"' + @source + '", "index" :"' + @index + '", "host" : "' + @event_host + '"}'
+          body << '{"time" :' + time.to_s + ', "event" :"' + event + '", "sourcetype" :"' + sourcetype + '", "source" :"' + @source + '", "index" :"' + splunk_index + '", "host" : "' + @event_host + '"}'
         end
 
         if @send_batched_events
